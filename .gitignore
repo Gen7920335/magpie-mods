@@ -1,0 +1,7 @@
+build*/
+*.pem
+*.key
+SIGNATURE
+*.dll
+*.so
+*.dylib

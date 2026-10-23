@@ -1,0 +1,42 @@
+{
+    // Mixed support: normal support where it can stand on the build plate, tree support where it
+    // cannot, in one object. Each support island goes to normal support when at least
+    // coverage_threshold percent of it reaches the plate straight down; otherwise to tree support.
+    // With selective merge the reachable part of an island goes to normal support and the rest to
+    // tree support. Orca's support settings apply to both kinds of support. A native mod filling the
+    // support.compose slot as the "mixed" generator: it decides the split, the core runs its own
+    // generators (and the Cura support mod's) on it and merges their layers. Painting a surface with
+    // the Normal or Tree channel of the support paint tool overrides the automatic choice there.
+    "id": "mixed_support",
+    "name": "Mixed support", "name_ko": "혼합 서포트",
+    "version": "2.1.0",
+    "api": { "major": 1, "min_minor": 0 },
+    "binary": "mixed_support",
+    // Priority 2 puts it above cura_support (0) and resin_support (1): with mixed support on, it is used. Its
+    // normal support can still be Cura's (normal_generator).
+    "slots": [ { "slot": "support.compose", "version": 1, "impl": "mixed", "when": "mixed_support.enable", "priority": 2,
+                 "menu": { "param": "enable", "entries": [
+                     { "label": "Mixed (auto)", "label_ko": "혼합 (자동)", "support_type": "normal(auto)" } ] } } ],
+    "thread_safe": true,
+    "params": {
+        "enable":             { "invalidates": ["posSupportMaterial"], "type": "bool",   "default": false,     "label": "Use mixed support", "label_ko": "혼합 서포트 사용" },
+        "normal_generator":   { "invalidates": ["posSupportMaterial"], "type": "string", "default": "orca",    "choices_from": "support.areas", "label": "Normal support generator", "label_ko": "일반 서포트 생성기", "ui": { "page": "Support", "group": "Mixed support", "group_after": "Support" }, "visible": "mixed_support.enable" },
+        "tree_style":         { "invalidates": ["posSupportMaterial"], "type": "string", "default": "organic", "label": "Tree style (organic, tree_slim, tree_strong or tree_hybrid)", "label_ko": "트리 스타일 (organic, tree_slim, tree_strong 또는 tree_hybrid)", "ui": { "page": "Support", "group": "Mixed support", "group_after": "Support" }, "visible": "mixed_support.enable" },
+        "coverage_threshold": { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 100,       "unit": "%", "label": "Normal support coverage threshold", "label_ko": "일반 서포트 커버 퍼센테이지 역치", "ui": { "page": "Support", "group": "Mixed support", "group_after": "Support" }, "visible": "mixed_support.enable" },
+        "selective_merge":    { "invalidates": ["posSupportMaterial"], "type": "bool",   "default": false,     "label": "Selective merge", "label_ko": "셀렉티브 머지", "ui": { "page": "Support", "group": "Mixed support", "group_after": "Support" }, "visible": "mixed_support.enable" }
+    },
+    "gui": {
+        // The support paint tool's two channels while mixed support is on: channel 0 (normal) and 1 (tree).
+        "paint_when": "mixed_support.enable",
+        "paint_channels": [
+            { "id": "normal", "color": "#59F273", "label": "Normal", "label_ko": "일반" },
+            { "id": "tree",   "color": "#59A6FF", "label": "Tree",   "label_ko": "트리" }
+        ]
+    },
+    // Line 1 settings.
+    "legacy_keys": {
+        "mixed_normal_coverage_threshold": "coverage_threshold",
+        "mixed_selective_merge": "selective_merge",
+        "mixed_tree_support_style": "tree_style"
+    }
+}

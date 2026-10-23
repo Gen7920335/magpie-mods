@@ -1,0 +1,100 @@
+{
+    // Resin support: PrusaSlicer 2.9.6's SLA support points and support trees (Default and Branching),
+    // printed with Orca's support toolpaths. A native mod filling the support.contacts slot as the
+    // "resin" generator and the object.z_offset slot (the object elevation). Orca's own
+    // support settings (Z/X/Y distances, interface layers and pattern, raft, threshold angle,
+    // enforcers and blockers) still apply. The parameters below are PrusaSlicer's SLA support
+    // settings, one set per tree strategy. Head and pillar sizes thinner than one support line are
+    // widened to it.
+    "id": "resin_support",
+    "name": "Resin support", "name_ko": "레진 서포트",
+    "version": "2.1.0",
+    "api": { "major": 1, "min_minor": 0 },
+    "binary": "resin_support",
+    // Priority 1 puts it above cura_support's: with both mods on, resin support is used.
+    "slots": [ { "slot": "support.contacts", "version": 1, "impl": "resin", "when": "resin_support.enable", "priority": 1,
+                 "menu": { "param": "enable", "entries": [
+                     { "label": "Resin (auto)", "label_ko": "레진 (자동)", "support_type": "normal(auto)" } ] } },
+               { "slot": "object.z_offset", "version": 1, "impl": "resin" } ],
+    "thread_safe": true,
+    // enable, tree_type and the two elevations decide the object's lift (object.z_offset), which moves
+    // every layer: they re-slice.
+    "params": {
+        "enable":                                  { "invalidates": ["posSlice"], "type": "bool",   "default": false,     "label": "Use resin support", "label_ko": "레진 서포트 사용" },
+        "tree_type":                               { "invalidates": ["posSlice"], "type": "string", "default": "default", "label": "Tree type (default or branching)", "label_ko": "트리 유형 (default 또는 branching)", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "points_density":                          { "invalidates": ["posSupportMaterial"], "type": "int",    "default": 100,       "unit": "%",   "label": "Support points density", "label_ko": "서포트 포인트 밀도", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "enforcers_only":                          { "invalidates": ["posSupportMaterial"], "type": "bool",   "default": false,     "label": "Support only in enforced regions", "label_ko": "강제 지정 영역에만 서포트", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+
+        "default_head_front_diameter":             { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 0.4,       "unit": "mm",  "label": "Default: pinhead front diameter", "label_ko": "기본: 핀헤드 전면 직경", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_head_width":                      { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Default: pinhead width", "label_ko": "기본: 핀헤드 폭", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_pillar_diameter":                 { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Default: pillar diameter", "label_ko": "기본: 기둥 직경", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_small_pillar_diameter_percent":   { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 50,        "unit": "%",   "label": "Default: small pillar diameter", "label_ko": "기본: 소형 기둥 직경 비율", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_max_bridges_on_pillar":           { "invalidates": ["posSupportMaterial"], "type": "int",    "default": 3,                        "label": "Default: max bridges on a pillar", "label_ko": "기본: 기둥당 최대 연결 가지 수", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_max_weight_on_model":             { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 10.0,                     "label": "Default: max weight on model", "label_ko": "기본: 모델 위 최대 지지 하중", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_pillar_connection_mode":          { "invalidates": ["posSupportMaterial"], "type": "string", "default": "dynamic",                "label": "Default: pillar connection mode (dynamic, zigzag or cross)", "label_ko": "기본: 기둥 연결 방식 (dynamic, zigzag 또는 cross)", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_buildplate_only":                 { "invalidates": ["posSupportMaterial"], "type": "bool",   "default": false,                    "label": "Default: support on build plate only", "label_ko": "기본: 빌드 플레이트에만 서포트", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_pillar_widening_factor":          { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 0.5,                      "label": "Default: pillar widening factor", "label_ko": "기본: 기둥 확장 계수", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_base_diameter":                   { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 4.0,       "unit": "mm",  "label": "Default: support base diameter", "label_ko": "기본: 서포트 베이스 직경", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_base_height":                     { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Default: support base height", "label_ko": "기본: 서포트 베이스 높이", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_base_safety_distance":            { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Default: support base safety distance", "label_ko": "기본: 서포트 베이스 안전 거리", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_critical_angle":                  { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 45,        "unit": "deg", "label": "Default: critical angle", "label_ko": "기본: 연결 임계각", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_max_bridge_length":               { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 15.0,      "unit": "mm",  "label": "Default: max bridge length", "label_ko": "기본: 최대 브릿지 길이", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_max_pillar_link_distance":        { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 10.0,      "unit": "mm",  "label": "Default: max pillar linking distance", "label_ko": "기본: 최대 기둥 연결 거리", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "default_object_elevation":                { "invalidates": ["posSlice"], "type": "float",  "default": 5.0,       "unit": "mm",  "label": "Default: object elevation", "label_ko": "기본: 출력물 띄우기", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+
+        "branching_head_front_diameter":           { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 0.4,       "unit": "mm",  "label": "Branching: pinhead front diameter", "label_ko": "가지형: 핀헤드 전면 직경", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_head_width":                    { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Branching: pinhead width", "label_ko": "가지형: 핀헤드 폭", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_pillar_diameter":               { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Branching: pillar diameter", "label_ko": "가지형: 기둥 직경", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_small_pillar_diameter_percent": { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 50,        "unit": "%",   "label": "Branching: small pillar diameter", "label_ko": "가지형: 소형 기둥 직경 비율", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_max_bridges_on_pillar":         { "invalidates": ["posSupportMaterial"], "type": "int",    "default": 2,                        "label": "Branching: max bridges on a pillar", "label_ko": "가지형: 기둥당 최대 연결 가지 수", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_max_weight_on_model":           { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 10.0,                     "label": "Branching: max weight on model", "label_ko": "가지형: 모델 위 최대 지지 하중", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_pillar_connection_mode":        { "invalidates": ["posSupportMaterial"], "type": "string", "default": "dynamic",                "label": "Branching: pillar connection mode (dynamic, zigzag or cross)", "label_ko": "가지형: 기둥 연결 방식 (dynamic, zigzag 또는 cross)", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_buildplate_only":               { "invalidates": ["posSupportMaterial"], "type": "bool",   "default": false,                    "label": "Branching: support on build plate only", "label_ko": "가지형: 빌드 플레이트에만 서포트", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_pillar_widening_factor":        { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 0.5,                      "label": "Branching: pillar widening factor", "label_ko": "가지형: 기둥 확장 계수", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_base_diameter":                 { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 4.0,       "unit": "mm",  "label": "Branching: support base diameter", "label_ko": "가지형: 서포트 베이스 직경", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_base_height":                   { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Branching: support base height", "label_ko": "가지형: 서포트 베이스 높이", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_base_safety_distance":          { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 1.0,       "unit": "mm",  "label": "Branching: support base safety distance", "label_ko": "가지형: 서포트 베이스 안전 거리", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_critical_angle":                { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 45,        "unit": "deg", "label": "Branching: critical angle", "label_ko": "가지형: 연결 임계각", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_max_bridge_length":             { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 5.0,       "unit": "mm",  "label": "Branching: max bridge length", "label_ko": "가지형: 최대 브릿지 길이", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_max_pillar_link_distance":      { "invalidates": ["posSupportMaterial"], "type": "float",  "default": 10.0,      "unit": "mm",  "label": "Branching: max pillar linking distance", "label_ko": "가지형: 최대 기둥 연결 거리", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" },
+        "branching_object_elevation":              { "invalidates": ["posSlice"], "type": "float",  "default": 5.0,       "unit": "mm",  "label": "Branching: object elevation", "label_ko": "가지형: 출력물 띄우기", "ui": { "page": "Support", "group": "Resin style supports", "group_after": "Support" }, "visible": "resin_support.enable" }
+    },
+    // Line 1 settings: resin_support_<x> is the default tree's, resin_branching_support_<x> the branching tree's.
+    "legacy_keys": {
+        "resin_support_tree_type": "tree_type",
+        "resin_support_points_density_relative": "points_density",
+        "resin_support_enforcers_only": "enforcers_only",
+        "resin_support_head_front_diameter": "default_head_front_diameter",
+        "resin_branching_support_head_front_diameter": "branching_head_front_diameter",
+        "resin_support_head_width": "default_head_width",
+        "resin_branching_support_head_width": "branching_head_width",
+        "resin_support_pillar_diameter": "default_pillar_diameter",
+        "resin_branching_support_pillar_diameter": "branching_pillar_diameter",
+        "resin_support_small_pillar_diameter_percent": "default_small_pillar_diameter_percent",
+        "resin_branching_support_small_pillar_diameter_percent": "branching_small_pillar_diameter_percent",
+        "resin_support_max_bridges_on_pillar": "default_max_bridges_on_pillar",
+        "resin_branching_support_max_bridges_on_pillar": "branching_max_bridges_on_pillar",
+        "resin_support_max_weight_on_model": "default_max_weight_on_model",
+        "resin_branching_support_max_weight_on_model": "branching_max_weight_on_model",
+        "resin_support_pillar_connection_mode": "default_pillar_connection_mode",
+        "resin_branching_support_pillar_connection_mode": "branching_pillar_connection_mode",
+        "resin_support_buildplate_only": "default_buildplate_only",
+        "resin_branching_support_buildplate_only": "branching_buildplate_only",
+        "resin_support_pillar_widening_factor": "default_pillar_widening_factor",
+        "resin_branching_support_pillar_widening_factor": "branching_pillar_widening_factor",
+        "resin_support_base_diameter": "default_base_diameter",
+        "resin_branching_support_base_diameter": "branching_base_diameter",
+        "resin_support_base_height": "default_base_height",
+        "resin_branching_support_base_height": "branching_base_height",
+        "resin_support_base_safety_distance": "default_base_safety_distance",
+        "resin_branching_support_base_safety_distance": "branching_base_safety_distance",
+        "resin_support_critical_angle": "default_critical_angle",
+        "resin_branching_support_critical_angle": "branching_critical_angle",
+        "resin_support_max_bridge_length": "default_max_bridge_length",
+        "resin_branching_support_max_bridge_length": "branching_max_bridge_length",
+        "resin_support_max_pillar_link_distance": "default_max_pillar_link_distance",
+        "resin_branching_support_max_pillar_link_distance": "branching_max_pillar_link_distance",
+        "resin_support_object_elevation": "default_object_elevation",
+        "resin_branching_support_object_elevation": "branching_object_elevation"
+    }
+}
