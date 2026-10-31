@@ -1,13 +1,13 @@
-# Magpie Slicer Next 모드 개발자 가이드
+# Magpie Slicer 모드 개발자 가이드
 
-제3자 개발자가 Magpie Slicer Next(이하 "Magpie")용 모드를 만들고, 빌드하고, 붙이고, 배포하는 데 필요한 내용을 한 곳에 모았습니다.
+제3자 개발자가 Magpie Slicer(이하 "Magpie")용 모드를 만들고, 빌드하고, 붙이고, 배포하는 데 필요한 내용을 한 곳에 모았습니다.
 
 | 항목 | 내용 |
 |---|---|
-| 대상 버전 | Magpie Slicer Next 다음 릴리스, 모드 API **1.1** |
+| 대상 버전 | Magpie Slicer 다음 릴리스, 모드 API **1.1** |
 | 이 저장소 | `docs/` 이 가이드, `sdk/` 헤더와 CMake 템플릿(앱 소스의 `mods/sdk/`), `mods/<id>/` 번들 공식 모드 10개의 소스 (예제로 보세요). Anycubic 모드 소스는 들어 있지 않습니다 |
 | 번들 공식 모드 | 10개. Anycubic 프린터 모드는 앱에 들어가지 않고 별도 패키지로 배포됩니다 (12장) |
-| 문서 성격 | 코드를 읽고 쓴 문서입니다. 코드에서 직접 확인하지 못하고 추론한 내용은 **(추론)** 으로 표시했습니다. 본문의 `src/...`, `docs/HLSD/...` 경로는 Magpie Slicer Next 앱 소스 기준입니다 |
+| 문서 성격 | 코드를 읽고 쓴 문서입니다. 코드에서 직접 확인하지 못하고 추론한 내용은 **(추론)** 으로 표시했습니다. 본문의 `src/...`, `docs/HLSD/...` 경로는 Magpie Slicer 앱 소스 기준입니다 |
 
 ---
 
@@ -36,7 +36,7 @@
 
 인증되지 않은 네이티브 모드는 앱 시작 때, 라이브러리를 로드하기 **전에** 아래 대화상자를 띄웁니다.
 
-- **언제 다시 묻나:** 모드 id + 버전 + `bin/<플랫폼>/` 폴더의 모든 파일 해시마다 한 번입니다. 허락은 `%APPDATA%\MagpieSlicerNext\mods\mods_state.json`의 `accepted_unverified`에 기억되고, 모드를 업데이트하거나 그 폴더의 파일이 바뀌거나 추가되면 다시 묻습니다. 로드되는 것은 허락받은 바로 그 파일들의 캐시 복사본입니다.
+- **언제 다시 묻나:** 모드 id + 버전 + `bin/<플랫폼>/` 폴더의 모든 파일 해시마다 한 번입니다. 허락은 `%APPDATA%\MagpieSlicer\mods\mods_state.json`의 `accepted_unverified`에 기억되고, 모드를 업데이트하거나 그 폴더의 파일이 바뀌거나 추가되면 다시 묻습니다. 로드되는 것은 허락받은 바로 그 파일들의 캐시 복사본입니다.
 - **"로드하지 않음"에 포커스가 가 있고, 창을 닫아도 "로드하지 않음"입니다.** 이를 고르면 그 실행 동안 모드를 건너뛰고(그 모드에 의존하는 모드도 함께), 다음 시작 때 다시 묻습니다.
 - **명령줄(CLI)** 에서는 물을 수 없으므로, GUI에서 한 번 허락한 모드만 로드됩니다. 허락받지 않은 모드는 `unverified native code not accepted yet (...); start the application and accept its warning to load it`로 남습니다. `--mod-test`도 마찬가지이니, 새 빌드를 시험하기 전에 앱을 한 번 열어 허락하세요.
 - 한국어 문구 (`{...}`는 모드 정보로 채워짐):
@@ -218,11 +218,11 @@ SDK는 별도 배포본이 아직 없습니다. 저장소의 `mods/sdk/` 폴더�
 | 위치 | Windows 예 | 취급 |
 |---|---|---|
 | `<resources>/mods` | `<앱 설치 폴더>\resources\mods` | 번들: 앱과 함께 설치되는 공식 모드. 제3자 모드를 넣는 곳이 아닙니다 |
-| `<data dir>/mods` | `%APPDATA%\MagpieSlicerNext\mods` | 설치: 신뢰된 키 서명이 있으면 바로, 없으면 네이티브 코드는 한 번 경고 후 로드 (0장) |
+| `<data dir>/mods` | `%APPDATA%\MagpieSlicer\mods` | 설치: 신뢰된 키 서명이 있으면 바로, 없으면 네이티브 코드는 한 번 경고 후 로드 (0장) |
 
 - 각 폴더에서 `*.json`과 `<id>/mod.json`을 읽습니다. 바이너리가 있는 모드는 반드시 패키지 폴더여야 합니다.
 - 설치 모드의 `bin/<플랫폼>/` 폴더는 `<data dir>/cache/mods/<id>-<version>-<해시16>/`로 복사되고, 복사본이 서명된 파일(인증 안 된 모드는 사용자가 허락한 파일)과 같은지 확인한 뒤 **복사본이 로드**됩니다. 원본은 실행 중에도 교체할 수 있고, 확인한 뒤 바꿔치기된 파일은 로드되지 않습니다.
-- 번들 모드와 같은 id의 설치 모드는 거부됩니다 (`a bundled mod has this id and cannot be replaced`). 공식 모드 id를 피하세요: `cura_support`, `half_layer`, `layer_time_blend`, `lesic`, `low_temp_interface`, `mixed_support`, `multi_nozzle_walls`, `resin_support`, `snapmaker_u1`, `support_extras`, 그리고 별도 배포되는 `anycubic`.
+- 번들 모드와 같은 id의 설치 모드는 거부됩니다 (`a bundled mod has this id and cannot be replaced`). 공식 모드 id를 피하세요: `cura_support`, `half_layer`, `layer_time_blend`, `low_temp_calibration`, `low_temp_interface`, `mixed_support`, `multi_nozzle_walls`, `resin_support`, `snapmaker_u1`, `support_extras`, 그리고 별도 배포되는 `anycubic`.
 - Windows 로드는 `LoadLibraryExW(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32)`입니다. **의존 DLL은 모드의 `bin/<플랫폼>/` 폴더와 System32에서만** 찾습니다. 앱 폴더의 DLL은 검색 경로가 아닙니다 (3.1절 참고).
 
 ### 3.1 MSVC 런타임
@@ -564,7 +564,7 @@ init에서 실패할 때는 먼저 `host->log(MP_LOG_ERROR, id, "이유")`를 �
 
 ### 8.1 가장 작은 JSON 모드 (서명 불필요)
 
-`%APPDATA%\MagpieSlicerNext\mods\first_layer_slowdown.json`:
+`%APPDATA%\MagpieSlicer\mods\first_layer_slowdown.json`:
 
 ```json
 {
@@ -750,9 +750,9 @@ cmake --build build-hello --config Release
 결과: `build-hello/package/hello_layers/` 아래에 `mod.json`, `bin/win-x64/hello_layers.dll`, `i18n/ko.json`, `tests/`.
 
 **붙이기**
-- `build-hello/package/hello_layers/` 폴더를 `%APPDATA%\MagpieSlicerNext\mods\hello_layers\`로 복사합니다. 앱을 시작하면 "인증되지 않은 모드" 경고가 한 번 뜨고, "위험을 이해하고 로드"를 고르면 빨간 "인증 안 됨" 태그로 로드됩니다. Gen의 인증 서명을 받은 폴더는 경고 없이 파란색 태그로 로드됩니다.
+- `build-hello/package/hello_layers/` 폴더를 `%APPDATA%\MagpieSlicer\mods\hello_layers\`로 복사합니다. 앱을 시작하면 "인증되지 않은 모드" 경고가 한 번 뜨고, "위험을 이해하고 로드"를 고르면 빨간 "인증 안 됨" 태그로 로드됩니다. Gen의 인증 서명을 받은 폴더는 경고 없이 파란색 태그로 로드됩니다.
 
-앱을 다시 시작하고, 프로세스 설정 Mods 페이지에서 켠 뒤 슬라이스하면 각 레이어 변경 뒤에 `; hello` 줄과 헤더에 `; mods: hello_layers 0.1.0`이 나옵니다. 로그(`%APPDATA%\MagpieSlicerNext\log`)에 `Mod not loaded: ...`가 있으면 14장을 보세요.
+앱을 다시 시작하고, 프로세스 설정 Mods 페이지에서 켠 뒤 슬라이스하면 각 레이어 변경 뒤에 `; hello` 줄과 헤더에 `; mods: hello_layers 0.1.0`이 나옵니다. 로그(`%APPDATA%\MagpieSlicer\log`)에 `Mod not loaded: ...`가 있으면 14장을 보세요.
 
 ---
 
@@ -761,7 +761,7 @@ cmake --build build-hello --config Release
 ### 9.1 `--mod-test <id>`
 
 ```bash
-magpie-slicer-next.exe --mod-test hello_layers
+magpie-slicer.exe --mod-test hello_layers
 ```
 
 `--datadir <폴더>`를 같이 주면 그 데이터 폴더의 모드로 테스트합니다 (자식 프로세스에도 전달됨).
@@ -834,12 +834,12 @@ Magpie 본 저장소는 `scripts/magpie/golden/`의 golden 스크립트로 여�
 ### 10.2 도구
 
 ```bash
-magpie-slicer-next.exe --mod-keygen my-dev-key.pem
+magpie-slicer.exe --mod-keygen my-dev-key.pem
 ```
 새 Ed25519 개인키를 쓰고 공개키 hex를 출력합니다 (이미 있으면 덮어쓰지 않음).
 
 ```bash
-magpie-slicer-next.exe --mod-sign build-hello/package/hello_layers --mod-sign-key my-dev-key.pem --mod-sign-key-id my-dev-key
+magpie-slicer.exe --mod-sign build-hello/package/hello_layers --mod-sign-key my-dev-key.pem --mod-sign-key-id my-dev-key
 ```
 `SIGNATURE`를 쓰고 "this application trusts it" 또는 "not trusted here: ..."를 출력합니다. **`--mod-sign-key-id`를 빼면 기본값이 `magpie-official-2026`** 이라 공식 키 이름으로 서명되고, 공식 개인키가 아니면 검증에 실패합니다. 반드시 자기 키 이름을 주세요.
 
@@ -931,7 +931,7 @@ magpie-slicer-next.exe --mod-sign build-hello/package/hello_layers --mod-sign-ke
 
 ## 12. 프린터 연결: `printer.agent` 슬롯과 `core.net` 서비스
 
-> 첫 사용 모드는 Anycubic 프린터 모드(LAN·Cloud, 1.2.0)이며, 소스는 이 저장소에 없습니다. 앱에 번들되지 않고 공식 키로 서명된 별도 패키지로 배포되며, 사용자는 그 폴더를 `%APPDATA%\MagpieSlicerNext\modsnycubic\`에 넣습니다. 슬롯 v1이 처음 쓰이는 중이라 새 필드나 이벤트가 더해질 수 있습니다(기존 것은 바뀌지 않음).
+> 첫 사용 모드는 Anycubic 프린터 모드(LAN·Cloud, 1.2.0)이며, 소스는 이 저장소에 없습니다. 앱에 번들되지 않고 공식 키로 서명된 별도 패키지로 배포되며, 사용자는 그 폴더를 `%APPDATA%\MagpieSlicer\modsnycubic\`에 넣습니다. 슬롯 v1이 처음 쓰이는 중이라 새 필드나 이벤트가 더해질 수 있습니다(기존 것은 바뀌지 않음).
 
 ### 12.1 `printer.agent` v1 (`magpie_slot_printer_agent.h`)
 - 각 구현이 Orca 프린터 에이전트 `mod:<mod id>`(구현 이름이 모드 id와 다르면 `.<impl>` 추가)로 등록되어, 프린터 프리셋의 **Printer Agent** 드롭다운에 나옵니다. Device 탭, AMS 보기, 전송 대화상자가 그대로 동작. 슬라이싱과 G-code는 건드리지 않습니다.
@@ -1025,7 +1025,7 @@ magpie-slicer-next.exe --mod-sign build-hello/package/hello_layers --mod-sign-ke
 
 ## 14. 문제 해결
 
-로그는 `%APPDATA%\MagpieSlicerNext\log\`에 있고, 로드 실패는 `Mod not loaded: <id>: <이유>` 한 줄로 남습니다.
+로그는 `%APPDATA%\MagpieSlicer\log\`에 있고, 로드 실패는 `Mod not loaded: <id>: <이유>` 한 줄로 남습니다.
 
 | 증상 / 메시지 | 원인 | 해결 |
 |---|---|---|
@@ -1081,6 +1081,6 @@ magpie-slicer-next.exe --mod-sign build-hello/package/hello_layers --mod-sign-ke
 | `mods/mixed_support` | `support.compose` | `choices_from`, compose 호스트 사용 |
 | `mods/multi_nozzle_walls` | `wall.plan` | open에서 한 번 읽기, 다중 노즐 |
 | `mods/low_temp_interface` | `gcode.events` | writer 출력 전반, 보조 타워, `printer` 범위 파라미터 |
-| `mods/lesic` | `gcode.events` | `gui.calibrations`, `calibration_value` |
+| `mods/low_temp_calibration` | `gcode.events` | `gui.calibrations`, `calibration_value` |
 | `mods/resin_support` | `support.contacts`, `object.z_offset` | 예외: 코어 라이브러리를 정적 링크하는 유일한 공식 모드 (제3자는 따라 하지 마세요) |
 | `mods/test_mod` | 테스트 슬롯 `test.math` | 로더·크래시 가드·API/FP 거부 테스트 |

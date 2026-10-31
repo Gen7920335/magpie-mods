@@ -1,0 +1,3 @@
+# Served files: the bytes in git are the bytes index.json hashes.
+/mods/*.json -text
+/index.json -text

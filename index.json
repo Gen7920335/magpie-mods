@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "mods": [
+    {
+      "id": "first_layer_slowdown",
+      "name": "First layer slowdown",
+      "version": "1.0.0",
+      "description": "Prints the first layer at a chosen speed for better bed adhesion.",
+      "author": "Magpie",
+      "tags": [
+        "speed",
+        "adhesion",
+        "first layer"
+      ],
+      "trust": "official",
+      "url": "https://raw.githubusercontent.com/Gen7920335/magpie-mods/main/mods/first_layer_slowdown.json",
+      "sha256": "3ebe13ac6c9f31cdeb50dff43147078f3aa1955db0e84631647f03744b1f7dba"
+    }
+  ]
+}

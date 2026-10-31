@@ -21,7 +21,7 @@
 
 #define MNW_MOD_ID "multi_nozzle_walls"
 
-MAGPIE_MOD_DEFINE(MNW_MOD_ID, "2.2.0")
+MAGPIE_MOD_DEFINE(MNW_MOD_ID, "2.2.1")
 
 namespace mnw {
 
@@ -185,9 +185,15 @@ WallTool detail_tool_for(const State &s, unsigned int base_filament)
     // walls' is warned about, material_differs). One no larger than the walls' nozzle prints no detail walls: the
     // planner finds no island that needs them (island_needs_detail).
     const int manual = s.detail_toolhead;
-    if (manual > 0 && std::size_t(manual) <= s.nozzle_mm.size() && unsigned(manual) != base.toolhead)
+    if (manual > 0 && std::size_t(manual) <= s.nozzle_mm.size()) {
+        // The walls' own toolhead chosen: the designated tool prints every wall, so there is no detail nozzle. Before,
+        // this fell through to the automatic choice and a smaller nozzle of the walls' colour printed the detail walls
+        // although the user had named another tool.
+        if (unsigned(manual) == base.toolhead)
+            return base;
         if (const WallTool t = tool_for_toolhead(s, unsigned(manual), base.filament))
             return t;
+    }
     if (const WallTool same = best(true))
         return same;
     // Auto keeps the assigned colour; an explicit toolhead may fall back to any smaller nozzle.
@@ -286,9 +292,11 @@ magpie::ExPolys boolean(int32_t op, const magpie::ExPolys &a, const magpie::ExPo
 }
 
 // Whether the island has detail that a smaller round bead reproduces better than the island's own: a convex
-// corner whose missing depth shrinks by more than 5 um, or area only the smaller bead's swept outline reaches.
-// Islands with holes or concave corners keep the large nozzle (line 1). `target` is the island as the walls follow
-// it (simplified and united by the core).
+// corner of the outer contour whose missing depth shrinks by more than 5 um (holes and concave corners do not
+// take this away; a hole's own corners are not looked at), or, for an island without holes or concave corners,
+// area only the smaller bead's swept outline reaches. `target` is the island as the walls follow it (simplified and
+// united by the core). Gen 2026-10-30: this is the intended rule; the old comment said holed islands keep the
+// large nozzle, which the code never did.
 bool island_needs_detail(const magpie::ExPolys &target, double large_diameter_mm, double detail_diameter_mm)
 {
     if (detail_diameter_mm >= large_diameter_mm - EPSILON)

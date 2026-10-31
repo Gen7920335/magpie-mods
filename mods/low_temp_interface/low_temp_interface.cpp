@@ -1,5 +1,6 @@
-// Low temperature support interface (Magpie line 1): on a single nozzle, support interfaces print at a lower
-// temperature of their own, so they stick less to the model. The support prints after the object on each layer, the
+// Low temperature support interface (Magpie line 1): support interfaces print at a lower
+// temperature of their own, so they stick less to the model, with the support's filament or one of their own (another
+// material printed cold too, Gen 2026-10-29). The support prints after the object on each layer, the
 // nozzle waits for the interface temperature (or cools while printing the temperature drop tower), optionally cooled
 // by the auxiliary fan and wiped on a nozzle brush, and the next other extrusion heats back with a short dwell.
 //
@@ -25,7 +26,7 @@
 
 #define LTI_MOD_ID "low_temp_interface"
 
-MAGPIE_MOD_DEFINE(LTI_MOD_ID, "2.0.1")
+MAGPIE_MOD_DEFINE(LTI_MOD_ID, "2.3.1")
 
 namespace lti {
 
@@ -115,6 +116,7 @@ struct State
     // From the first interface path until the next other extrusion, which restores the filament's temperature.
     bool   active       = false;
     int    target       = 0;  // degC
+    bool   target_sublayer = false; // the target is a support style's sublayer temperature, not an object's
     int    filament     = -1;
     int    normal       = 0;  // degC
     double heating_time = 0.; // s
@@ -126,16 +128,30 @@ struct State
     // the tower off and on between layers.
     std::optional<bool> tower_enabled_cache;
     bool                brim_printed = false;
+    // The interface grid of low_temp_calibration: specimens print one after another, so an object's support end
+    // waits for the next path (finish_deferred) instead of heating back at once.
+    bool calibration_grid = false;
+    bool finish_deferred  = false;
     std::vector<Vec2>   plate_path;
     double              left = 0., rear = 0., size = 0., spacing = 0.; // mm
 };
 
 void text(const State &s, const char *t) { s.w->text(s.w->w, t); }
 
-// Prints the low temperature interface for the object in ctx: its support's interface uses the support filament.
-bool enabled(const State &s, mp_ctx *ctx)
+// Prints the low temperature interface for the object in ctx, with the support's filament or a filament of its own
+// (an interface of another material printed cold too, Gen 2026-10-29): the interface's filament is the one printing it.
+bool enabled(const State &s, mp_ctx *)
 {
-    return s.p.enable && config_int(ctx, "support_interface_filament") == 0 && s.w->filament(s.w->w) >= 0;
+    return s.p.enable && s.w->filament(s.w->w) >= 0;
+}
+
+// The interface temperature of the object in ctx, degC: its own value (an object-scope parameter, the calibration
+// grid's specimens), else the print's.
+int object_temperature(const State &s, mp_ctx *ctx)
+{
+    if (auto v = magpie::param_i64(ctx, "temperature"))
+        return int(*v);
+    return s.p.temperature;
 }
 
 bool has_configured_wiper(const Params &p)
@@ -167,8 +183,7 @@ bool read_tower_enabled(const State &s, mp_ctx *ctx)
 {
     // PrintSequence::ByLayer.
     constexpr int by_layer = 0;
-    if (!s.p.tower || !s.p.enable || config_int(ctx, "support_interface_filament") != 0 || config_int(ctx, "print_sequence") != by_layer ||
-        has_configured_wiper(s.p))
+    if (!s.p.tower || !s.p.enable || config_int(ctx, "print_sequence") != by_layer || has_configured_wiper(s.p))
         return false;
     if (s.w->has_support_layers(s.w->w) == 0)
         return false;
@@ -269,6 +284,12 @@ bool build_tower_path(State &s, mp_ctx *ctx, TowerPath &path)
     if (const double step = s.w->nominal_z(s.w->w) - s.last_print_z; step > EPSILON && step < layer_height)
         layer_height = float(step);
     if (nozzle_diameter <= 0.0f || layer_height <= 0.0f)
+        return false;
+    // A tower layer taller than the nozzle cannot be printed (the core refuses such layers, and its flow has no valid
+    // width): independent support layers of a larger support nozzle step 0.6 mm between two interface tool visits of a
+    // 0.4 mm nozzle (seed 619 of the U1 random test stopped in Flow::with_spacing). The tower stops growing there and
+    // the cooling falls back to the cooling position, as without a tower; a later layer would print in the air above it.
+    if (layer_height > nozzle_diameter)
         return false;
 
     const TowerTools tower_tools_now = tower_tools(s, ctx);
@@ -371,9 +392,10 @@ bool build_tower_path(State &s, mp_ctx *ctx, TowerPath &path)
     return true;
 }
 
-bool build_tower_brim_paths(const State &s, mp_ctx *ctx, std::vector<TowerPath> &paths)
+// The brim's lines at height_mm, the height of the tower pass they go under.
+bool build_tower_brim_paths(const State &s, mp_ctx *ctx, double height_mm, std::vector<TowerPath> &paths)
 {
-    const double  layer_height_now = s.w->layer_height(s.w->w);
+    const double  layer_height_now = height_mm;
     const int32_t filament_id      = s.w->filament(s.w->w);
     if (!s.path_initialized || layer_height_now <= 0. || filament_id < 0 || s.spacing <= 0.0)
         return false;
@@ -382,7 +404,8 @@ bool build_tower_brim_paths(const State &s, mp_ctx *ctx, std::vector<TowerPath> 
         return false;
     const float nozzle_diameter = float(config_at(ctx, "nozzle_diameter", physical_extruder_id).value_or(0.));
     const float layer_height    = float(layer_height_now);
-    if (nozzle_diameter <= 0.0f || layer_height <= 0.0f)
+    // The tower layer's height limit (build_tower_path()), mm.
+    if (nozzle_diameter <= 0.0f || layer_height <= 0.0f || layer_height > nozzle_diameter)
         return false;
 
     const TowerTools tools           = tower_tools(s, ctx);
@@ -446,14 +469,15 @@ void extrude_tower(State &s, mp_ctx *ctx, const TowerPath &path, bool cooling_tr
     if (!path.empty()) {
         const TowerPath       *first = &path;
         std::vector<TowerPath> brim_paths;
-        if (!cooling_transition && !s.brim_printed && build_tower_brim_paths(s, ctx, brim_paths) && !brim_paths.empty())
+        if (!s.brim_printed && build_tower_brim_paths(s, ctx, path.height, brim_paths) && !brim_paths.empty())
             first = &brim_paths.front();
         s.w->tower_arrival(s.w->w, first->xy[0], first->xy[1], MP_ROLE_WIPE_TOWER, "travel to the temperature drop tower");
     }
-    // The tower owns its brim; object and support layers do not decide its first pass.
-    if (!cooling_transition && !s.brim_printed) {
+    // The tower owns its brim, under its first pass, a cooling pass too (an interface on the tower's first layer: the
+    // brim came after it, U1 random test seed 3501), at that pass's height (H/2 cools at mid-layer).
+    if (!s.brim_printed) {
         std::vector<TowerPath> brim_paths;
-        if (build_tower_brim_paths(s, ctx, brim_paths)) {
+        if (build_tower_brim_paths(s, ctx, path.height, brim_paths)) {
             text(s, "; temperature drop tower brim begin\n");
             for (const TowerPath &brim : brim_paths) {
                 text(s, "; temperature drop tower brim line\n");
@@ -485,7 +509,7 @@ void start(State &s, mp_ctx *ctx, int target_temperature)
     if (config_count(ctx, normal_key) == 0)
         return;
     const int normal_temperature    = int(config_at(ctx, normal_key, filament_id).value_or(0.));      // degC
-    const int interface_temperature = target_temperature > 0 ? target_temperature : s.p.temperature;    // degC
+    const int interface_temperature = target_temperature > 0 ? target_temperature : object_temperature(s, ctx); // degC
 
     if (interface_temperature > 0 && interface_temperature != normal_temperature) {
         text(s, "; low-temperature support interface begin\n");
@@ -502,7 +526,10 @@ void start(State &s, mp_ctx *ctx, int target_temperature)
             text(s, "; low-temperature support interface auxiliary cooling\n");
             s.w->aux_fan(s.w->w, s.p.aux_fan_speed);
             auxiliary_fan_started = true;
-        } else if (fan_possible && s.w->position_known(s.w->w) != 0) {
+        } else if (fan_possible) {
+            // An unknown position (the first move after a tool change's G-code) travels straight there, as the core's
+            // own first travel after it does: the U1 random test (seed 27) lost the cooling on every interface that
+            // followed a tool change.
             Vec2 position(s.p.cooling_x, s.p.cooling_y);
             bool valid = position.x >= 0. && position.y >= 0. && std::isfinite(position.x) && std::isfinite(position.y);
             if (!valid) {
@@ -542,7 +569,8 @@ void start(State &s, mp_ctx *ctx, int target_temperature)
             s.w->aux_fan(s.w->w, resume);
         }
 
-        if (has_configured_wiper(s.p) && s.w->position_known(s.w->w) != 0) {
+        // From an unknown position as well (see the cooling travel above).
+        if (has_configured_wiper(s.p)) {
             text(s, "; low-temperature support interface nozzle brushing\n");
             s.w->raw_travel(s.w->w, s.p.brush_start_x, s.p.brush_start_y, "move to nozzle brush");
             s.w->set_feedrate(s.w->w, s.p.brush_speed * 60., "set nozzle brush speed");
@@ -554,6 +582,7 @@ void start(State &s, mp_ctx *ctx, int target_temperature)
     }
     s.active       = true;
     s.target       = interface_temperature;
+    s.target_sublayer = target_temperature > 0;
     s.filament     = filament_id;
     s.normal       = normal_temperature;
     s.heating_time = s.p.heating_time;
@@ -561,6 +590,7 @@ void start(State &s, mp_ctx *ctx, int target_temperature)
 
 void finish(State &s)
 {
+    s.finish_deferred = false;
     if (!s.active)
         return;
     if (s.normal > 0 && s.normal != s.target) {
@@ -572,6 +602,7 @@ void finish(State &s)
     }
     s.active       = false;
     s.target       = 0;
+    s.target_sublayer = false;
     s.filament     = -1;
     s.normal       = 0;
     s.heating_time = 0.;
@@ -583,17 +614,39 @@ void on_path(State &s, mp_ctx *ctx, mp_gcode_event_v1 &ev)
 {
     const int  sublayer_temperature = ev.tagged_temperature; // degC, 0 = none
     const bool interface_role       = ev.role == MP_ROLE_SUPPORT_INTERFACE || (ev.role == MP_ROLE_IRONING && ev.in_support != 0);
+    if (s.finish_deferred) {
+        s.finish_deferred = false;
+        if (s.active && interface_role && enabled(s, ctx) && s.w->filament(s.w->w) == s.filament) {
+            // The calibration grid's next specimen: from the last specimen's interface temperature straight to this
+            // one's, waiting for it (cooling too, Marlin M109 R), with no heating back in between.
+            const int target = sublayer_temperature > 0 ? sublayer_temperature : object_temperature(s, ctx);
+            if (target > 0 && target != s.target) {
+                s.w->set_temperature(s.w->w, target, 1, s.filament, target < s.target ? MP_TEMP_WAIT_COOLING : 0);
+                s.target = target;
+            }
+            s.target_sublayer   = sublayer_temperature > 0;
+            ev.owns_temperature = 1;
+            return;
+        }
+        finish(s);
+    }
     if (interface_role && enabled(s, ctx)) {
         if (!s.active)
             start(s, ctx, sublayer_temperature);
         else {
-            // Between sublayer and contact interface the target changes without another cooling wait.
-            const int     target   = sublayer_temperature > 0 ? sublayer_temperature : s.p.temperature;
+            // Between sublayer and contact interface the target changes without another cooling wait. Between two
+            // objects' own temperatures (one interface run over several objects, an H/2 frame) it waits as the
+            // calibration grid's next specimen does: the U1 random test (seed 331) printed the next object's
+            // interface while the nozzle still heated from 175 to 226 degC.
+            const int     target   = sublayer_temperature > 0 ? sublayer_temperature : object_temperature(s, ctx);
             const int32_t filament = s.w->filament(s.w->w);
             if (target > 0 && target != s.target && filament >= 0) {
-                s.w->set_temperature(s.w->w, target, 0, filament, 0);
+                const bool object_change = sublayer_temperature <= 0 && !s.target_sublayer;
+                s.w->set_temperature(s.w->w, target, object_change ? 1 : 0, filament,
+                                     object_change && target < s.target ? MP_TEMP_WAIT_COOLING : 0);
                 s.target = target;
             }
+            s.target_sublayer = sublayer_temperature > 0;
         }
     } else if (s.active)
         finish(s);
@@ -619,13 +672,16 @@ void on_layer_end(State &s, mp_ctx *ctx)
 
 // -- Slot functions --
 
-mp_status open(void *, mp_ctx *ctx, const mp_gcode_export_v1 *, const mp_gcode_writer_v1 *writer, void **state, uint32_t *flags)
+mp_status open(void *, mp_ctx *ctx, const mp_gcode_export_v1 *info, const mp_gcode_writer_v1 *writer, void **state, uint32_t *flags)
 {
     return magpie::guarded([&] {
         *state = nullptr;
         auto s = std::make_unique<State>();
         s->w   = writer;
         s->p   = read_params(ctx);
+        // Only the calibration grid keeps the low temperature from one specimen's support to the next (Gen 2026-10-28).
+        s->calibration_grid = info != nullptr && info->calibration != nullptr &&
+                              std::string(info->calibration) == "low_temp_calibration.grid";
         if (!s->p.enable)
             return;
         *flags = MP_GCODE_WANTS_PATHS | MP_GCODE_CHANGES_TEMPERATURE | MP_GCODE_USED;
@@ -646,6 +702,11 @@ mp_status event(void *, void *state, mp_ctx *ctx, mp_gcode_event_v1 *ev)
                 finish(s);
             break;
         case MP_GCODE_EV_SUPPORT_END:
+            if (s.calibration_grid && s.active)
+                s.finish_deferred = true;
+            else
+                finish(s);
+            break;
         case MP_GCODE_EV_OBJECTS_END: finish(s); break;
         case MP_GCODE_EV_LAYER_END: on_layer_end(s, ctx); break;
         default: break;
@@ -685,7 +746,7 @@ mp_status validate(void *, mp_ctx *ctx, const mp_gcode_validate_v1 *object, mp_g
     // overheats the support filament (Magpie line 1).
     return magpie::guarded([&] {
         const Params p = read_params(ctx);
-        if (object->has_support == 0 || !p.enable || config_int(ctx, "support_interface_filament") != 0)
+        if (object->has_support == 0 || !p.enable)
             return;
         // Marlin EXTRUDE_MINTEMP and Klipper min_extrude_temp both default to 170 degC.
         constexpr int firmware_min_extrude_temperature_c = 170;
@@ -698,8 +759,12 @@ mp_status validate(void *, mp_ctx *ctx, const mp_gcode_validate_v1 *object, mp_g
             out->n_args  = 2;
             return;
         }
-        for (uint32_t i = 0; i < object->n_support_filaments; ++i) {
-            const int32_t filament          = object->support_filaments[i];
+        // The filament printing the interface: its own (1-based setting), else the support's.
+        const int32_t        interface_filament = config_int(ctx, "support_interface_filament") - 1;
+        std::vector<int32_t> filaments(object->support_filaments, object->support_filaments + object->n_support_filaments);
+        if (interface_filament >= 0)
+            filaments.assign(1, interface_filament);
+        for (const int32_t filament : filaments) {
             const int     max_temperature_c = int(config_at(ctx, "nozzle_temperature_range_high", filament).value_or(0.));
             if (max_temperature_c > 0 && temperature_c > max_temperature_c) {
                 out->message = "Support interface temperature %1% \xC2\xB0" "C exceeds the maximum nozzle temperature %2% \xC2\xB0" "C of filament %3%.";
@@ -723,7 +788,7 @@ mp_status tower_preview(void *, mp_ctx *ctx, int32_t style_temperature, mp_tower
         const int    interface_temperature = lowest_target(p, style_temperature, config_int(ctx, "support_interface_top_layers")); // degC
         const int    nozzles               = config_count(ctx, "nozzle_diameter");
         const auto   print_sequence        = config_f64(ctx, "print_sequence");
-        const bool   show = p.tower && p.enable && interface_temperature > 0 && config_int(ctx, "support_interface_filament") == 0 &&
+        const bool   show = p.tower && p.enable && interface_temperature > 0 &&
                           (!print_sequence || int(*print_sequence) == 0) && !has_configured_wiper(p) && nozzles > 0;
         int normal_temperature = 0; // degC, hottest filament
         for (const char *key : {"nozzle_temperature", "nozzle_temperature_initial_layer"})
@@ -754,8 +819,15 @@ mp_status tower_requested(void *, mp_ctx *ctx, int32_t *out)
     });
 }
 
+// The support prints last whenever the mod is on (support_last), so a half-layer frame planned before the export
+// keeps the layer's interfaces together and the temperature drops once.
+mp_status support_last_planned(void *, mp_ctx *ctx, int32_t *out)
+{
+    return magpie::guarded([&] { *out = read_params(ctx).enable ? 1 : 0; });
+}
+
 const mp_gcode_events_v1 table = {sizeof(mp_gcode_events_v1), open, event, support_last, tower_on_layer, path_speeds, start_gcode, close,
-                                  validate, tower_preview, tower_requested};
+                                  validate, tower_preview, tower_requested, nullptr, support_last_planned};
 
 } // namespace lti
 

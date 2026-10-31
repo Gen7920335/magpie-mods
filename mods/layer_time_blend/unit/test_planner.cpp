@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numeric>
 #include <random>
 #include <vector>
@@ -49,7 +50,8 @@ double added(const std::vector<double> &t, const std::vector<double> &target)
 }
 
 // The constraints, written out on their own: T >= t, neighbours within `diff` (s), convex bends
-// (second differences) at most `bend` (s), all within `tol` (s).
+// (second differences) at most `bend` (s) or the input's own bend at that layer where larger, all within
+// `tol` (s).
 bool feasible(const std::vector<double> &t, const std::vector<double> &T, double diff, double bend, double tol)
 {
     for (size_t i = 0; i < T.size(); ++i) {
@@ -57,7 +59,7 @@ bool feasible(const std::vector<double> &t, const std::vector<double> &T, double
             return false;
         if (i > 0 && std::abs(T[i] - T[i - 1]) > diff + tol)
             return false;
-        if (i > 0 && i + 1 < T.size() && T[i + 1] - 2. * T[i] + T[i - 1] > bend + tol)
+        if (i > 0 && i + 1 < T.size() && T[i + 1] - 2. * T[i] + T[i - 1] > std::max(bend, t[i + 1] - 2. * t[i] + t[i - 1]) + tol)
             return false;
     }
     return true;
@@ -195,6 +197,101 @@ TEST_CASE("Easing rounds ramp starts and ends but leaves the long layer's peak s
     // With N = 0 the same input bends at once.
     const std::vector<double> sharp = blend(spike, linear(5.));
     CHECK(added(spike, T) > added(spike, sharp));
+}
+
+TEST_CASE("Easing leaves the bends the layer times already have", "[LayerTimeBlend]")
+{
+    // Alternating 30/27 s layers (infill turning every layer): every pair is within D = 5 s, so nothing waits
+    // without easing. Each short layer is a convex bend of 6 s, over D / (N + 1) = 0.83 s at N = 5; easing
+    // bounds only the bends blending makes, so these stay. Before it bounded every bend: +255.7 s over 200
+    // layers (2026-10-27).
+    std::vector<double> jitter(200);
+    for (size_t i = 0; i < jitter.size(); ++i)
+        jitter[i] = i % 2 == 0 ? 30. : 27.;
+    CHECK_THAT(added(jitter, blend(jitter, linear(5., 5))), WithinAbs(0., 1e-9));
+    CHECK_THAT(added(jitter, blend(jitter, log_type(20., 5))), WithinAbs(0., 1e-9));
+    // One short layer within the limit of both neighbours: no wait at any N.
+    const std::vector<double> dip{ 30., 25., 30. };
+    CHECK_THAT(added(dip, blend(dip, linear(5., 5))), WithinAbs(0., 1e-9));
+    // A ramp blending makes is still rounded: the same jitter under a long layer waits more with easing.
+    std::vector<double> ramp = jitter;
+    ramp[100] = 80.;
+    const double sharp = added(ramp, blend(ramp, linear(5.)));
+    const double eased = added(ramp, blend(ramp, linear(5., 5)));
+    CHECK_THAT(sharp, WithinAbs(480., 1e-6));
+    CHECK_THAT(eased, WithinAbs(482.333, 1e-3)); // the 2026-10-27 mirror's figure
+    CHECK(eased > sharp);
+    CHECK(feasible(ramp, blend(ramp, linear(5., 5)), 5., 5. / 6., 1e-9));
+}
+
+TEST_CASE("Limit exceptions minimise the waits plus their cost", "[LayerTimeBlend]")
+{
+    // The waits with exception cost c are the least of sum(T) + c * sum(max(0, |T[i] - T[i-1]| - D)) over
+    // T >= t. A grid search over small chains finds that least value on its own.
+    auto cost_of = [](const std::vector<double> &t, const std::vector<double> &T, double diff, double c) {
+        double sum = 0.;
+        for (size_t i = 0; i < T.size(); ++i) {
+            sum += T[i] - t[i];
+            if (i > 0)
+                sum += c * std::max(0., std::abs(T[i] - T[i - 1]) - diff);
+        }
+        return sum;
+    };
+    std::mt19937 rng(11);
+    for (int round = 0; round < 60; ++round) {
+        const size_t        n = 2 + rng() % 3; // 2..4 layers
+        std::vector<double> t(n);
+        for (double &x : t)
+            x = 0.5 * double(rng() % 17); // 0..8 s in 0.5 s steps
+        const double diff = 1. + double(rng() % 2);            // s
+        const double c    = (std::vector<double>{ 0.4, 1., 1.5, 3. })[rng() % 4];
+        const double step = 0.5;                                // grid, s; the optimum lies on it (breakpoints are sums of t and D)
+        const double top  = *std::max_element(t.begin(), t.end());
+        double       best = std::numeric_limits<double>::infinity();
+        std::vector<double> S(t);
+        for (;;) {
+            best = std::min(best, cost_of(t, S, diff, c));
+            size_t i = 0;
+            while (i < n && S[i] + step > top + 1e-12) {
+                S[i] = t[i];
+                ++i;
+            }
+            if (i == n)
+                break;
+            S[i] += step;
+        }
+        LayerTimeBlend::Settings s = linear(diff);
+        s.exception_cost           = c;
+        const std::vector<double> T = blend(t, s);
+        for (size_t i = 0; i < n; ++i)
+            CHECK(T[i] >= t[i] - 1e-12);
+        CHECK_THAT(cost_of(t, T, diff, c), WithinAbs(best, 1e-9));
+    }
+}
+
+TEST_CASE("A long layer breaks the limit instead of spreading waits when that is cheaper", "[LayerTimeBlend]")
+{
+    std::vector<double> spike(121, 30.);
+    spike[60] = 200.;
+    LayerTimeBlend::Settings s = linear(5.);
+    CHECK_THAT(added(spike, blend(spike, s)), WithinAbs(5610., 1e-6));
+    // Figures from the 2026-10-27 prototype checked against an LP (reports/LTB_soft_proto.py).
+    s.exception_cost = 1.;
+    CHECK_THAT(added(spike, blend(spike, s)), WithinAbs(0., 1e-9));
+    s.exception_cost = 3.;
+    CHECK_THAT(added(spike, blend(spike, s)), WithinAbs(30., 1e-6));
+    s.exception_cost = 10.;
+    CHECK_THAT(added(spike, blend(spike, s)), WithinAbs(450., 1e-6));
+    // With easing the pairs that break the limit keep their jump and the ramps are rounded as before.
+    s.ease_layers = 4;
+    const std::vector<double> T = blend(spike, s);
+    CHECK(added(spike, T) >= 450. - 1e-6);
+    CHECK(added(spike, T) < 5610.);
+    // Off: the limit holds everywhere.
+    s.exception_cost = 0.;
+    s.ease_layers    = 0;
+    const std::vector<double> strict = blend(spike, s);
+    CHECK(feasible(spike, strict, 5., 1e9, 1e-9));
 }
 
 TEST_CASE("Log blending limits the ratio of neighbouring layer times", "[LayerTimeBlend]")

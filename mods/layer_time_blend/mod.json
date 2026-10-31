@@ -6,21 +6,24 @@
     // marked, written and re-estimated by the core.
     "id": "layer_time_blend",
     "name": "Layer time blending", "name_ko": "레이어 타임 블렌딩",
-    "version": "1.3.0",
+    "version": "1.5.1",
     "api": { "major": 1, "min_minor": 0 },
     "binary": "layer_time_blend",
     // Picked while blending is on. The settings are what the core's export reads: where it waits, the tower, the park
     // position and the rates of the temperature wait estimate.
     "slots": [ { "slot": "gcode.time_plan", "version": 1, "impl": "blend", "when": "layer_time_blend.blend_type != \"off\"",
                  "settings": { "wait_at": "layer_time_blend.wait_at", "tower_size": "layer_time_blend.tower_size",
+                               "tower_toolhead": "layer_time_blend.tower_toolhead",
                                "park_x": "layer_time_blend.park_x", "park_y": "layer_time_blend.park_y",
                                "heat_rate": "layer_time_blend.heat_rate", "cool_rate": "layer_time_blend.cool_rate" } } ],
     "thread_safe": true,
     "params": {
-        "blend_type":     { "invalidates": ["psGCodeExport"], "type": "string", "default": "off",
+        // blend_type and wait_at decide whether the tower toolhead (tower_toolhead) is planned into the tool ordering,
+        // which the prime tower and the skirt are made from (review 2026-10-30: wait_at park -> tower kept the old ordering).
+        "blend_type":     { "invalidates": ["psWipeTower", "psSkirtBrim", "psGCodeExport"], "type": "string", "default": "off",
                             "options": [ { "value": "off",    "label": "Off",    "label_ko": "끔" },
-                                         { "value": "linear", "label": "Linear", "label_ko": "선형" },
-                                         { "value": "log",    "label": "Log",    "label_ko": "로그" } ],
+                                         { "value": "log",    "label": "Log (recommended)", "label_ko": "로그 (추천)" },
+                                         { "value": "linear", "label": "Linear", "label_ko": "선형" } ],
                             "label": "Layer time blending", "label_ko": "레이어 타임 블렌딩", "ui": { "page": "Speed", "group": "Layer time blending" } },
         "max_diff":       { "invalidates": ["psGCodeExport"], "type": "float", "default": 5,  "unit": "s", "visible": "layer_time_blend.blend_type == \"linear\"",
                             "label": "Maximum layer time difference", "label_ko": "최대 레이어 시간 차이", "ui": { "page": "Speed", "group": "Layer time blending" } },
@@ -32,11 +35,15 @@
                             "label": "First blended layer", "label_ko": "블렌딩 시작 레이어", "ui": { "page": "Speed", "group": "Layer time blending" } },
         "wait_cap":       { "invalidates": ["psGCodeExport"], "type": "float", "default": 0,  "unit": "s", "visible": "layer_time_blend.blend_type != \"off\"",
                             "label": "Maximum wait per layer (0 = no limit)", "label_ko": "레이어당 최대 대기 (0 = 제한 없음)", "ui": { "page": "Speed", "group": "Layer time blending" } },
+        // A long layer then need not spread waits over the layers around it: where breaking the limit by 1 s saves at
+        // least this many seconds of waits, the planner breaks it (log: the same in ratios). 0 never breaks it.
+        "exception_cost": { "invalidates": ["psGCodeExport"], "type": "float", "default": 0, "visible": "layer_time_blend.blend_type != \"off\"",
+                            "label": "Break the limit where it saves this many seconds of waits per second (0 = never)", "label_ko": "한도를 1초 넘길 때 이만큼 대기가 줄면 넘김 (초, 0 = 넘기지 않음)", "ui": { "page": "Speed", "group": "Layer time blending" } },
         "warn_total_pct": { "invalidates": ["psGCodeExport"], "type": "float", "default": 15, "unit": "%", "visible": "layer_time_blend.blend_type != \"off\"",
                             "label": "Warn when waits exceed this share of the print time", "label_ko": "대기 합계가 출력 시간의 이 비율을 넘으면 경고", "ui": { "page": "Speed", "group": "Layer time blending" } },
         "warn_single":    { "invalidates": ["psGCodeExport"], "type": "float", "default": 60, "unit": "s", "visible": "layer_time_blend.blend_type != \"off\"",
                             "label": "Warn when one wait exceeds", "label_ko": "단일 대기가 이 시간을 넘으면 경고", "ui": { "page": "Speed", "group": "Layer time blending" } },
-        "wait_at":        { "invalidates": ["psGCodeExport"], "type": "string", "default": "tower", "visible": "layer_time_blend.blend_type != \"off\"",
+        "wait_at":        { "invalidates": ["psWipeTower", "psSkirtBrim", "psGCodeExport"], "type": "string", "default": "tower", "visible": "layer_time_blend.blend_type != \"off\"",
                             "options": [ { "value": "tower",       "label": "Layer time tower", "label_ko": "레이어 타임 균일화 타워" },
                                          { "value": "purge_tower", "label": "Over the purge tower", "label_ko": "퍼지 타워 위" },
                                          { "value": "park",        "label": "Park position",    "label_ko": "파킹 위치" },
@@ -44,7 +51,12 @@
                             "label": "Wait position", "label_ko": "대기 위치", "ui": { "page": "Speed", "group": "Layer time blending" } },
         "tower_size":     { "invalidates": ["psGCodeExport"], "type": "float", "default": 15, "unit": "mm",
                             "visible": "layer_time_blend.blend_type != \"off\" and layer_time_blend.wait_at == \"tower\"",
-                            "label": "Tower size", "label_ko": "타워 크기", "ui": { "page": "Speed", "group": "Layer time blending" } },
+                            "label": "Tower size", "label_ko": "타워 크기", "ui": { "page": "Speed", "group": "Layer time blending" } },
+        // The toolhead that prints the tower (Gen 2026-10-30), 1-based; 0 prints it with whatever tool is in use. The core
+        // plans the tool change (ToolOrdering) and prints the tower when that tool is in, the wait at its visit.
+        "tower_toolhead": { "invalidates": ["psWipeTower", "psSkirtBrim", "psGCodeExport"], "type": "int", "default": 0,
+                            "visible": "layer_time_blend.blend_type != \"off\" and layer_time_blend.wait_at == \"tower\"",
+                            "label": "Tower toolhead (0 = the tool in use)", "label_ko": "타워 툴헤드 (0 = 현재 툴)", "ui": { "page": "Speed", "group": "Layer time blending" } },
         "in_place_max":   { "invalidates": ["psGCodeExport"], "type": "float", "default": 2,  "unit": "s",
                             "visible": "layer_time_blend.blend_type != \"off\" and (layer_time_blend.wait_at == \"park\" or layer_time_blend.wait_at == \"purge_tower\")",
                             "label": "Shorter waits stay in place", "label_ko": "이보다 짧은 대기는 제자리에서", "ui": { "page": "Speed", "group": "Layer time blending" } },
