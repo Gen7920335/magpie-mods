@@ -1,3 +1,5 @@
+<img alt="Magpie Slicer" src="docs/assets/magpie-slicer.png" width="96">
+
 # Magpie Slicer mods
 
 Magpie Slicer용 모드를 만드는 데 필요한 것을 모은 저장소입니다.

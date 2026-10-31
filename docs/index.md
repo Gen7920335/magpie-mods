@@ -1,3 +1,5 @@
+<img alt="Magpie Slicer" src="assets/magpie-slicer.png" width="96">
+
 # Magpie Slicer 모드 개발자 가이드
 
 제3자 개발자가 Magpie Slicer(이하 "Magpie")용 모드를 만들고, 빌드하고, 붙이고, 배포하는 데 필요한 내용을 한 곳에 모았습니다.
