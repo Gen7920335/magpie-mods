@@ -365,22 +365,64 @@ SDK는 별도 배포본이 아직 없습니다. 저장소의 `mods/sdk/` 폴더�
 
 설정은 키로(`layer_height`), 파라미터는 `<id>.<name>`으로 읽습니다. 산술, 비교, `and`/`or`/`not`, `if(c, a, b)`, `min`/`max`, 큰따옴표 문자열을 지원합니다. `visible`은 파라미터만 읽을 수 있습니다. 프린터 패널(`gui.printer`)의 `visible`은 예외로, 그 패널의 필드 id와 `printer_state`를 읽습니다 (12.3절).
 
-### 4.9 (진행 중) 파라미터를 Orca 설정 옆에 놓기: `"ui"`
+### 4.9 파라미터를 Orca 설정 옆에 놓기: `"ui"`
 
-> 새로 들어간 기능입니다. 이 필드를 모르는 이전 앱은 무시하므로 넣어도 해가 없습니다.
+> 이 필드를 모르는 이전 앱은 무시하므로 넣어도 해가 없습니다. `category`는 2.5.0.2.1부터 읽습니다. 그 전 앱은 `category`를 무시하고 그룹을 `group_after` 뒤에 둡니다.
 
-파라미터 정의에 `"ui"`를 넣으면, Mods 페이지 대신 설정 탭의 Orca 설정 옆에 행이 나옵니다. 그 브랜치의 `ModParamUi`(`ModSet.hpp`) 기준입니다.
+파라미터 정의에 `"ui"`를 넣으면, Mods 페이지 대신 설정 탭의 Orca 설정 옆에 행이 나옵니다. 앱 소스의 `ModParamUi`(`src/libslic3r/ModHost/ModSet.hpp`) 기준입니다.
 
 | 키 | 의미 |
 |---|---|
 | `after` | 이 Orca 설정 키(예: `"outer_wall_speed"`)의 줄 바로 다음에 한 줄로 |
 | `page`, `group` | 또는 페이지 `page`(예: `"Quality"`)의 그룹 `group`에. 그런 그룹이 있으면 그 안에, 없으면 새 그룹을 만듦 |
-| `group_after` | 새 그룹을 이 그룹(예: `"Precision"`) 바로 뒤에. 없으면 페이지 끝 |
+| `group_after` | 새 그룹을 이 그룹(예: `"Precision"`) 바로 뒤에. 없으면 페이지 끝(또는 `category`의 끝) |
+| `category` | 새 그룹이 들어갈 접는 범주(아래 4.9.1). `group`과 함께만 쓸 수 있음 |
 | `widget` | `""`(타입대로), `"toolhead"`(int: 0 = 자동, n = n번 툴헤드, 프린터 노즐 이름의 드롭다운), `"layer_ranges"`(`first:last:toolhead` 항목들의 문자열을 표로) |
+| `merge_into` | Orca 설정 하나와 합쳐 한 컨트롤로 보이기(Orca 줄은 숨김). string 파라미터는 비지 않은 `options`를 Orca 선택지에 더하고(`""`이면 Orca 값 유지), int 파라미터는 `merge_when`이 참일 때 Orca 값을 덮어씀 |
+| `merge_when`, `merge_orca` | `merge_into`의 조건 식과, 그때 컨트롤이 보여 줄 Orca 쪽 값의 식. 여러 파라미터가 조건을 달리해 한 설정에 합쳐질 수 있음 |
 
 - 이름은 Orca 소스에 쓰인 영어 그대로입니다(번역된 화면 이름이 아님).
 - 탭에 그 자리가 없으면 행은 Mods 페이지로 돌아갑니다.
-- 예: `"ui": { "page": "Quality", "group": "Multi-nozzle walls", "group_after": "Precision", "widget": "toolhead" }` (그 브랜치의 `mods/multi_nozzle_walls/mod.json`).
+- 예: `"ui": { "page": "Quality", "group": "Multi-nozzle walls", "group_after": "Precision", "category": "Walls", "widget": "toolhead" }` (`mods/multi_nozzle_walls/mod.json`).
+- 합치기 예: `"ui": { "merge_into": "tree_support_wall_count", "merge_when": "support_type == \"tree(auto)\" or support_type == \"tree(manual)\"", "merge_orca": "tree_support_wall_count" }` (`mods/support_extras/mod.json`).
+
+#### 4.9.1 설정 범주 (`category`)
+
+2.5.0.2.1부터 공정·필라멘트·프린터 탭의 각 페이지는 옵션 그룹들을 몇 개의 **접는 범주**로 묶어 보여 줍니다. 범주 제목 띠를 누르면 접히고 펴지며, 접힌 범주에는 들어 있는 옵션 수가 보이고, 스크롤하면 현재 범주 제목이 페이지 위에 고정됩니다.
+
+- **`category`를 쓴 그룹:** 그 페이지에 같은 제목의 범주가 있으면 그 범주의 끝에 들어갑니다. `group_after`가 그 범주 안에 있으면 그 그룹 바로 뒤에, 다른 범주에 있으면 `group_after`는 무시됩니다. 페이지에 없는 제목이면 페이지 끝에 새 범주를 만듭니다.
+- **`category`를 안 쓴 그룹:** 바로 앞 그룹(`group_after`, 없으면 페이지 끝의 마지막 그룹)의 범주를 따라갑니다.
+- **`after`로 넣은 행:** 그 Orca 설정이 있는 범주에 그대로 들어갑니다. 그래서 `category`는 `group`이 있을 때만 받고, 없이 쓰면 매니페스트 오류입니다.
+- **제목과 번역:** 범주 제목은 영어 원문으로 적고, 화면에는 앱 번역 카탈로그의 번역이 쓰입니다. 앱에 없는 새 제목은 적은 그대로(영어) 보이므로, 되도록 아래 표의 기존 제목을 쓰십시오.
+- **보이기:** 범주 안의 그룹이 모두 숨으면(모드·`visible` 조건) 범주 제목도 숨습니다. 예를 들어 "Support engines"는 서포트를 켜고 그 엔진을 골랐을 때만 보입니다.
+- **접힘 상태:** 앱 설정(`settings_fold` 섹션)에 탭/페이지/범주별로 저장됩니다. 처음에는 페이지의 첫 범주만 펼쳐져 있습니다. 설정 검색으로 찾은 옵션은 그 범주를 펼칩니다.
+
+페이지별 기존 범주(영어 원문, 그 범주가 시작되는 Orca 그룹 순서대로):
+
+| 탭/페이지 | 범주 |
+|---|---|
+| process/Quality | Layers and line width, Seam, precision and ironing, Walls, Bridging and overhangs |
+| process/Strength | Shells, Infill |
+| process/Speed | Print speed, Acceleration and jerk |
+| process/Support | Support |
+| process/Multimaterial | Prime tower, Ooze prevention and flushing |
+| process/Others | Adhesion, Special modes, G-code and plugins |
+| filament/Filament | Filament, Temperatures, Volumetric speed |
+| filament/Cooling | Layer cooling, Fans |
+| filament/Multimaterial | Wipe tower, Tool change |
+| machine/Basic information | Machine, Cooling, clearance and accessories |
+| machine/Machine G-code | Start and end G-code, Layer and object G-code, Filament and other G-code |
+
+공식 모드가 쓰는 범주:
+
+| 모드 | 페이지 | 그룹 → 범주 |
+|---|---|---|
+| `cura_support`, `mixed_support`, `resin_support` | Support | 각 서포트 그룹 → **Support engines**(새 범주) |
+| `low_temp_interface` | Support / Basic information | Low-temperature support interface → **Support interface**(새 범주), Nozzle cooling and brush → **Nozzle cooling and waits**(새 범주) |
+| `layer_time_blend` | Speed / Basic information | Layer time blending → **Layer time**(새 범주) / **Nozzle cooling and waits** |
+| `multi_nozzle_walls` | Quality | Multi-nozzle walls → **Walls** |
+
+탭 이름(`process`, `filament`, `machine`)은 이 표를 읽기 위한 것이고 `"ui"`에는 적지 않습니다. `page`만 적으면 그 파라미터 `scope`의 탭에서 찾습니다.
 
 ---
 
@@ -905,6 +947,7 @@ magpie-slicer.exe --mod-sign build-hello/package/hello_layers --mod-sign-key my-
 ### 11.7 `layer.bands` v1
 - 역할: 모델 레이어의 일부 경로를 더 얇은 물리적 띠(band)로 인쇄 (H/2).
 - `plan(user, ctx, out)`: 객체마다, 설정 적용 때마다 호출. 아무것도 띠로 만들지 않으면 `wall_depths = 0, support = 0`.
+- `support` 값: `0` 서포트는 띠 없음, `MP_LAYER_BANDS_SUPPORT_ALL`(1) 서포트 전체, `MP_LAYER_BANDS_SUPPORT_CONTACT`(2) 접촉 영역만(접점과 인터페이스 레이어, 인터페이스 레이어가 없는 쪽은 모델에 닿는 서포트 섬의 접점 레이어와 그 다음 레이어). 나머지 서포트는 제 높이로 인쇄합니다. 그 밖의 0 아닌 값은 전체로 읽습니다(2.5.0.2.1 전에는 0 아니면 전체). 공식 `half_layer` 2.1.0은 파라미터 `support_scope`(`"contact"` 기본, `"all"`)로 이 값을 고릅니다.
 - `schedule(user, timing, boundaries, n, out)`: 나중 띠 블록을 레이어 인쇄 순서의 어느 경계에 넣을지. `allowed == 0`은 고르면 안 됨. 못 고르면 `UINT32_MAX`.
 - **현재 실행기는 두 개의 같은 띠(0.5, 0.5)와 바깥 벽 2줄만** 인쇄하고 다른 계획은 `Print::validate`에서 거부합니다. 객체당 하나의 구현, 프린트 전체가 같은 구현.
 - 계획이 바뀌면 파라미터가 선언하지 않아도 벽과 서포트를 다시 합니다.
@@ -994,6 +1037,7 @@ magpie-slicer.exe --mod-sign build-hello/package/hello_layers --mod-sign-key my-
 - [ ] 모든 파라미터 기본값이 중립(꺼짐), `invalidates`가 맞거나 생략
 - [ ] `when`/`settings`가 읽는 파라미터에 `invalidates`
 - [ ] 라벨에 `label_ko`, 이름에 `name_ko`
+- [ ] `"ui"`로 새 그룹을 만들면 `category`에 기존 범주 제목(4.9.1)을 씀. `category`는 `group`과 함께만
 - [ ] G-code 설정 규칙이 있다면 기본값(꺼짐)에서 아무것도 바꾸지 않음
 - [ ] `author` 필드에 제작자 이름 (경고문에 표시됨)
 - [ ] (프린터 모드) `thread_safe: true`, 접속하는 모든 호스트·포트를 `network`에, `reason`과 `reason_ko`
@@ -1075,7 +1119,7 @@ magpie-slicer.exe --mod-sign build-hello/package/hello_layers --mod-sign-key my-
 
 | 모드 | 슬롯 | 볼 점 |
 |---|---|---|
-| `mods/half_layer` (101줄) | `layer.bands` | 가장 짧은 실제 모드. 입력 검증, 객체 범위 파라미터, `legacy_keys` |
+| `mods/half_layer` (103줄) | `layer.bands` | 가장 짧은 실제 모드. 입력 검증, 객체 범위 파라미터, `legacy_keys` |
 | `mods/snapmaker_u1` (143줄) | `gcode.events` | 빈 콜백 채우기, `host->alloc` 문자열 반환, `host->warn`, 테스트 케이스 |
 | `mods/support_extras` (117줄) | `support.style` | 상태 null로 "해당 없음" |
 | `mods/layer_time_blend` | `gcode.time_plan` | 선언 `settings`, `visible`, 순수 계산 분리(`planner.cpp`)와 단위 테스트 |

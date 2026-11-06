@@ -6,8 +6,10 @@ Magpie Slicer용 모드를 만드는 데 필요한 것을 모은 저장소입니
 
 - **[모드 개발자 가이드 (한국어)](docs/index.md)**: 툴체인, CMake 템플릿, hello 모드, 슬롯 레퍼런스, 매니페스트, 지켜야 할 규칙, 서명과 인증, 테스트, 체크리스트, 문제 해결
 - **`sdk/`**: 모드가 쓰는 C 헤더(`include/`)와 CMake 템플릿(`MagpieMod.cmake`). 슬라이서 소스 없이 이것만으로 모드를 빌드할 수 있습니다.
-- **`mods/<id>/`**: 앱에 번들되는 Magpie 공식 모드 10개의 소스. 실제 동작하는 예제로 보세요. (프린터 연결용 Anycubic 모드는 이 저장소에 없습니다.)
+- **`mods/<id>/`**: 앱에 번들되는 Magpie 공식 모드 10개의 소스(Magpie Slicer 2.5.0.2.1 기준). 실제 동작하는 예제로 보세요. (프린터 연결용 Anycubic 모드는 이 저장소에 없습니다.)
 - **`index.json`**: 앱의 "모드 받기"가 읽는 모드 목록. `mods/<id>.json` 데이터 모드(과 `<id>.meta.json`)를 넣고 `python build_index.py --base-url https://raw.githubusercontent.com/Gen7920335/magpie-mods/main` 으로 다시 만듭니다.
+
+**2.5.0.2.1에서 바뀐 모드 구조:** 설정 탭이 접는 범주로 묶이면서 `mod.json`의 `"ui"`에 `category`가 생겼습니다. 모드가 새 그룹을 만들 때 어느 범주에 넣을지 정합니다(가이드 4.9.1절, 페이지별 범주 목록 포함). 또 `layer.bands` 슬롯의 `support` 값에 "접촉 영역만"(`MP_LAYER_BANDS_SUPPORT_CONTACT`)이 생겼습니다(가이드 11.7절). 공식 모드는 `half_layer` 2.1.0, `low_temp_interface` 2.3.2로 올랐고, 서포트 엔진·저온 접점·레이어 시간·다중 노즐 벽 모드에 범주가 붙었습니다.
 
 | 모드 | 슬롯 | 내용 |
 |---|---|---|
